@@ -20,9 +20,9 @@ export default function Navbar() {
             </a>
           </div>
           <div className="hidden md:flex gap-4">
-            <a href="#" className="hover:text-blue-400 transition">Login</a>
+            <a href="/login" className="hover:text-blue-400 transition">Login</a>
             <span>|</span>
-            <a href="#" className="hover:text-blue-400 transition">Register</a>
+            <a href="/register" className="hover:text-blue-400 transition">Register</a>
           </div>
         </div>
       </div>
