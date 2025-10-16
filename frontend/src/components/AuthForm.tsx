@@ -1,259 +1,221 @@
-import { useState } from 'react';
-import { Mail, Lock, User, Eye, EyeOff, Home, Phone } from 'lucide-react';
-import axios from 'axios';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
-export default function AuthForm() {
-  const [isLogin, setIsLogin] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    password: '',
-    confirmPassword: ''
+import { Button } from "@/components/ui/button";
+import { Form } from "@/components/ui/form";
+import FormField from "./FormField";
+// import {
+//   Dialog,
+//   DialogContent,
+//   DialogDescription,
+//   DialogFooter,
+//   DialogHeader,
+//   DialogTitle,
+// } from "@/components/ui/dialog";
+// import InputOtp from "./modal/InputOtp";
+
+import { login, register } from "@/services/UserAPi/AuthApi";
+import LogoSvg from "@/public/logo.svg";
+import useAuthStore from "@/store/AuthStrore";
+
+type FormType = "sign-in" | "sign-up";
+
+const authFormSchema = (type: FormType) =>
+  z.object({
+    name: type === "sign-up" ? z.string().min(1, "Name is required") : z.string().optional(),
+    email: z.string().email("Enter a valid email"),
+    password: z.string().min(6, "Password must be at least 6 characters"),
   });
 
-  // Handle input change
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
-  };
+const AuthForm = ({ type }: { type: FormType }) => {
+  const navigate = useNavigate();
+  const formSchema = authFormSchema(type);
 
-  // Form validation
-  const validateForm = () => {
-    if (!formData.email || !formData.password) {
-      setError('Email and password are required.');
-      return false;
-    }
-    if (!isLogin) {
-      if (!formData.name || !formData.phone) {
-        setError('Name and phone number are required.');
-        return false;
-      }
-      if (formData.password !== formData.confirmPassword) {
-        setError('Passwords do not match.');
-        return false;
-      }
-    }
-    setError(null);
-    return true;
-  };
+  // const [open, setOpen] = useState(false);
+  // const [emailVerified, setEmailVerified] = useState(false);
+  // const [sendingOtp, setSendingOtp] = useState(false); // prevent multiple OTP requests
 
-  // Handle form submit
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateForm()) return;
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+    },
+  });
 
-    setLoading(true);
-    setError(null);
+  const isSignIn = type === "sign-in";
 
+  // const handleSendOtp = async (e: React.MouseEvent<HTMLButtonElement>) => {
+  //   e.preventDefault();
+
+  //   // Prevent multiple OTP sends
+  //   if (sendingOtp) return;
+
+  //   const email = form.getValues("email");
+
+  //   try {
+  //     z.string().email().parse(email);
+
+  //     setSendingOtp(true);
+  //     const response = await sendOtp(email);
+
+  //     if (response.status === 200) {
+  //       toast.success("OTP sent successfully");
+  //       setOpen(true);
+  //     } else {
+  //       toast.error("Failed to send OTP. Try again later.");
+  //     }
+  //   } catch (error) {
+  //     if (error instanceof ZodError) {
+  //       toast.error(error.errors[0].message);
+  //     } else {
+  //       toast.error("Failed to send OTP. Please try again.");
+  //     }
+  //   } finally {
+  //     setSendingOtp(false);
+  //   }
+  // };
+
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
     try {
-      if (isLogin) {
-        // Example API call
-        const res = await axios.post('/api/auth/login', {
-          email: formData.email,
-          password: formData.password
-        });
-        console.log('Login success:', res.data);
-        alert('Login successful!');
+      if (isSignIn) {
+        const response = await login(data);
+        if (response.status === 200) {
+          const { accessToken, refreshToken, user } = response.data;
+          useAuthStore.getState().login(accessToken, user, refreshToken);
+          toast.success("Logged in successfully.");
+          navigate("/");
+        }
       } else {
-        // Example API call
-        const res = await axios.post('/api/auth/register', {
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
-          password: formData.password
-        });
-        console.log('Register success:', res.data);
-        alert('Account created successfully!');
+        // if (!emailVerified) {
+        //   toast.error("Please verify your email before creating an account.");
+        //   return;
+        // }
+
+        await register(data);
+        toast.success("Account created successfully. Please sign in.");
+        navigate("/sign-in");
       }
-    } catch (err: any) {
-      console.error(err);
-      setError(err.response?.data?.message || 'Something went wrong.');
-    } finally {
-      setLoading(false);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(`There was an error: ${error?.response?.data?.message || error.message}`);
     }
   };
 
-  // Toggle Login/Register mode
-  const toggleMode = () => {
-    setIsLogin(!isLogin);
-    setError(null);
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      password: '',
-      confirmPassword: ''
-    });
-  };
+  // const mail = form.getValues("email");
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-slate-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 mb-4">
-            <Home className="text-blue-600" size={40} />
-            <span className="text-3xl font-bold text-slate-900">
-              Find<span className="text-blue-600">Deal</span>
-            </span>
-          </div>
-          <p className="text-slate-600">
-            {isLogin
-              ? 'Welcome back! Please login to your account.'
-              : 'Create an account to get started.'}
-          </p>
+    <div className="card-border lg:min-w-[566px]">
+      <div className="flex flex-col gap-6 card py-14 px-10">
+        <div className="flex justify-center gap-2">
+          <img src={LogoSvg} alt="logo" height={32} width={38} />
+          <h2 className="text-primary-100">IntelliPrep</h2>
         </div>
+        <h3 className="text-primary-100">Practice Job Interview with AI</h3>
 
-        {/* Form */}
-        <form
-          onSubmit={handleSubmit}
-          className="bg-white rounded-2xl shadow-xl p-8"
-        >
-          <h2 className="text-2xl font-bold text-slate-900 mb-4">
-            {isLogin ? 'Login' : 'Create Account'}
-          </h2>
-
-          {error && (
-            <div className="bg-red-100 text-red-600 p-2 rounded mb-4 text-sm">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            {!isLogin && (
-              <>
-                {/* Name */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Full Name
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                    <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleChange}
-                      placeholder="John Doe"
-                      className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Phone */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Phone Number
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      placeholder="+91 9876543210"
-                      className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
-                </div>
-              </>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="w-full space-y-6 mt-4 form">
+            {!isSignIn && (
+              <FormField
+                control={form.control}
+                name="name"
+                label="Name"
+                placeholder="Your Name"
+                type="text"
+              />
             )}
 
-            {/* Email */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Email
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                <input
-                  type="email"
+            <div className="flex justify-between items-end gap-2">
+              <div className="flex-1">
+                <FormField
+                  control={form.control}
                   name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="you@example.com"
-                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  label="Email"
+                  placeholder="Your email address"
+                  type="email"
+                  // disabled={emailVerified} // disable after verification
                 />
               </div>
-            </div>
 
-            {/* Password */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-12 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-                <button
+              {/* {!isSignIn && (
+                <Button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  onClick={handleSendOtp}
+                  className={`h-[42px] rounded-2xl ${
+                    emailVerified ? "bg-green-500 text-white" : "bg-blue-200 text-black"
+                  }`}
+                  disabled={sendingOtp || emailVerified}
                 >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
+                  {sendingOtp
+                    ? "Sending..."
+                    : emailVerified
+                    ? "Verified"
+                    : "Verify"}
+                </Button>
+              )} */}
             </div>
 
-            {/* Confirm Password */}
-            {!isLogin && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    placeholder="••••••••"
-                    className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-              </div>
-            )}
+            <FormField
+              control={form.control}
+              name="password"
+              label="Password"
+              placeholder="Enter your password"
+              type="password"
+              // disabled={!emailVerified && !isSignIn} // disable until email is verified
+            />
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-60"
-            >
-              {loading ? 'Please wait...' : isLogin ? 'Login' : 'Create Account'}
-            </button>
-          </div>
+            <Button className="btn" type="submit">
+              {isSignIn ? "Sign In" : "Create an Account"}
+            </Button>
+          </form>
+        </Form>
 
-          {/* Toggle */}
-          <div className="mt-6 text-center">
-            <p className="text-slate-600">
-              {isLogin ? "Don't have an account? " : 'Already have an account? '}
-              <button
-                type="button"
-                onClick={toggleMode}
-                className="text-blue-600 font-semibold hover:text-blue-700"
-              >
-                {isLogin ? 'Sign Up' : 'Login'}
-              </button>
-            </p>
-          </div>
-        </form>
+        <p className="text-center">
+          {isSignIn ? "No account yet?" : "Have an account already?"}
+          <Link
+            to={isSignIn ? "/sign-up" : "/sign-in"}
+            className="font-bold text-user-primary ml-1"
+          >
+            {isSignIn ? "Sign Up" : "Sign In"}
+          </Link>
+        </p>
+
+        {/* <h1 className="flex justify-center text-slate-300 font-base">OR</h1>
+        <div className="flex justify-center">
+          <Button className="border">
+            <FcGoogle />
+            Login with Google
+          </Button>
+        </div> */}
       </div>
+
+      {/* OTP Dialog for Sign-Up only */}
+      {/* {!isSignIn && (
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="sm:max-w-[425px] bg-gradient-to-tl from-black to-blue-800">
+            <DialogHeader>
+              <DialogTitle className="text-primary-100">Email Verification</DialogTitle>
+              <DialogDescription className="text-primary-100">
+                Enter the OTP sent to your email address.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="w-full flex justify-center text-primary-100">
+              <InputOtp
+                setEmailVerified={setEmailVerified}
+                setOpen={setOpen}
+                email={mail}
+              />
+            </div>
+            <DialogFooter />
+          </DialogContent>
+        </Dialog>
+      )} */}
     </div>
   );
-}
+};
+
+export default AuthForm;
